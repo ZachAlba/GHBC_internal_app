@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 
+import { API_KEY } from 'react-native-dotenv';
+
 // API configuration
 const API_BASE_URL = 'https://greenhillbeachclub.net/accounts/api';
-// In a real app, you should store this in a secure place or use environment variables
-const API_KEY = 'your_api_key_here'; 
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
