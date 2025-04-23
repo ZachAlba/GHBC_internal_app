@@ -10,103 +10,63 @@ import {
   ActivityIndicator,
   SafeAreaView,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Modal
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-
-// Define the type for your navigation stack
-type RootStackParamList = {
-  HomeScreen: undefined;
-  CheckInScreen: undefined;
-};
+import { Member, CheckIn, RootStackParamList } from '../types/types';
 
 type CheckInScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CheckInScreen'>;
 
-interface Member {
-  user_id: number;
-  profile_id: number;
-  name: string;
-  membership_type: string;
-  phone_primary: string | null;
-  vehicles: Array<{ id: number; license_plate: string }>;
-  additional_members: Array<{ id: number; name: string }>;
-}
-
-interface CheckIn {
-  profile_id: number;
-  check_in_date: string;
-  check_in_time: string;
-  guests: Array<{ name: string; notes?: string }>;
-  notes?: string;
-}
-
 const CheckInScreen = () => {
-  // Use navigation hook instead of onGoBack prop
   const navigation = useNavigation<CheckInScreenNavigationProp>();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [todaysCheckins, setTodaysCheckins] = useState<number[]>([]);
 
-  // Load member data on component mount
+  const [guestModalVisible, setGuestModalVisible] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [guestName, setGuestName] = useState('');
+
+  // ↓ NEW: action modal state ↓
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [actionMember, setActionMember] = useState<Member | null>(null);
+
   useEffect(() => {
     loadMemberData();
   }, []);
 
-  // Filter members when search query changes
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredMembers([]);
       return;
     }
-
     const query = searchQuery.toLowerCase();
     const filtered = members.filter(member => {
-      // Search by name, phone, or vehicle
       const nameMatch = member.name?.toLowerCase().includes(query);
       const phoneMatch = member.phone_primary?.toLowerCase().includes(query);
-      
-      // Search in vehicles
-      const vehicleMatch = member.vehicles?.some(vehicle => 
-        vehicle.license_plate.toLowerCase().includes(query)
-      );
-      
-      // Search in additional members
-      const additionalMemberMatch = member.additional_members?.some(addMember =>
-        addMember.name.toLowerCase().includes(query)
-      );
-      
+      const vehicleMatch = member.vehicles?.some(v => v.license_plate.toLowerCase().includes(query));
+      const additionalMemberMatch = member.additional_members?.some(m => m.name.toLowerCase().includes(query));
       return nameMatch || phoneMatch || vehicleMatch || additionalMemberMatch;
     });
-    
     setFilteredMembers(filtered);
   }, [searchQuery, members]);
 
-  // Load member data from AsyncStorage
   const loadMemberData = async () => {
     setIsLoading(true);
     try {
-      // Load member data
       const memberDataString = await AsyncStorage.getItem('@member_data');
-      if (!memberDataString) {
-        throw new Error('No member data found');
-      }
-      
+      if (!memberDataString) throw new Error('No member data found');
       const memberData = JSON.parse(memberDataString);
       setMembers(memberData.members || []);
-      
-      // Load today's check-ins
       const checkInsString = await AsyncStorage.getItem('@todays_checkins');
       const checkIns = checkInsString ? JSON.parse(checkInsString) : [];
-      
-      // Extract profile IDs of members who checked in today
-      const checkedInProfileIds = checkIns.map((checkin: CheckIn) => checkin.profile_id);
-      setTodaysCheckins(checkedInProfileIds);
-      
+      setTodaysCheckins(checkIns.map((c: CheckIn) => c.profile_id));
     } catch (error) {
       console.error('Error loading member data:', error);
       Alert.alert('Error', 'Failed to load member data. Please go back and download data again.');
@@ -115,103 +75,48 @@ const CheckInScreen = () => {
     }
   };
 
-  // Handle member check-in
-  const handleCheckIn = async (member: Member) => {
-    try {
-      // Check if member is already checked in
-      if (todaysCheckins.includes(member.profile_id)) {
-        Alert.alert('Already Checked In', `${member.name} is already checked in today.`);
-        return;
-      }
-      
-      // Ask about guests
-      Alert.alert(
-        'Guest Check-in',
-        `${member.name} - Do they have any guests today?`,
-        [
-          {
-            text: 'No Guests',
-            onPress: () => completeCheckIn(member, [])
-          },
-          {
-            text: 'Add Guests',
-            onPress: () => promptForGuests(member)
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('Check-in error:', error);
-      Alert.alert('Error', 'Failed to complete check-in');
+  // ↓ UPDATED: open action modal instead of immediate Alert ↓
+  const handleCheckIn = (member: Member) => {
+    if (todaysCheckins.includes(member.profile_id)) {
+      Alert.alert('Already Checked In', `${member.name} is already checked in today.`);
+      return;
     }
+    setActionMember(member);
+    setActionModalVisible(true);
   };
 
-  // Prompt for guest information
   const promptForGuests = (member: Member) => {
-    // In a real app, you'd show a modal for guest info
-    // For this example, we'll use Alert to simulate adding one guest
-    Alert.alert(
-      'Add Guest',
-      'Guest name:',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: () => completeCheckIn(member, [])
-        },
-        {
-          text: 'Add Guest',
-          onPress: (guestName) => {
-            if (guestName) {
-              completeCheckIn(member, [{ name: guestName, notes: 'Added via check-in' }]);
-            } else {
-              completeCheckIn(member, [{ name: 'Guest', notes: 'No name provided' }]);
-            }
-          }
-        }
-      ],
-      { 
-        cancelable: true,
-      }
-    );
+    setSelectedMember(member);
+    setGuestName('');
+    setGuestModalVisible(true);
   };
 
-  // Complete the check-in process
-  const completeCheckIn = async (member: Member, guests: Array<{ name: string, notes?: string }>) => {
+  const handleGuestSubmission = (guests: Array<{ name: string; notes?: string }>) => {
+    if (selectedMember) completeCheckIn(selectedMember, guests);
+    setGuestModalVisible(false);
+    setSelectedMember(null);
+  };
+
+  const completeCheckIn = async (member: Member, guests: Array<{ name: string; notes?: string }>) => {
     try {
-      // Create check-in record
       const now = new Date();
       const checkin: CheckIn = {
         profile_id: member.profile_id,
         check_in_date: now.toISOString().split('T')[0],
         check_in_time: now.toTimeString().split(' ')[0],
-        guests: guests
+        guests
       };
-      
-      // Get existing check-ins
+
       const checkInsString = await AsyncStorage.getItem('@todays_checkins');
       const checkIns = checkInsString ? JSON.parse(checkInsString) : [];
-      
-      // Add new check-in
       checkIns.push(checkin);
-      
-      // Save updated check-ins
       await AsyncStorage.setItem('@todays_checkins', JSON.stringify(checkIns));
-      
-      // Update state
       setTodaysCheckins([...todaysCheckins, member.profile_id]);
-      
-      // Show success message
-      const guestText = guests.length > 0 
-        ? ` with ${guests.length} guest${guests.length > 1 ? 's' : ''}` 
+
+      const guestText = guests.length > 0
+        ? ` with ${guests.length} guest${guests.length > 1 ? 's' : ''}`
         : '';
-        
-      Alert.alert(
-        'Check-in Successful',
-        `${member.name} has been checked in${guestText}!`,
-        [{ text: 'OK' }]
-      );
-      
-      // Clear search
+      Alert.alert('Check-in Successful', `${member.name} has been checked in${guestText}!`, [{ text: 'OK' }]);
       setSearchQuery('');
     } catch (error) {
       console.error('Complete check-in error:', error);
@@ -219,55 +124,60 @@ const CheckInScreen = () => {
     }
   };
 
-  // Render a member item in the list
   const renderMemberItem = ({ item }: { item: Member }) => {
     const isCheckedIn = todaysCheckins.includes(item.profile_id);
-    
+
     return (
       <TouchableOpacity
         style={[
           styles.memberItem,
           isCheckedIn && styles.checkedInMember
         ]}
-        onPress={() => handleCheckIn(item)}
-        disabled={isCheckedIn}
+        onPress={() => {
+          setActionMember(item);
+          setActionModalVisible(true);
+        }}
       >
         <View style={styles.memberInfo}>
           <Text style={styles.memberName}>{item.name || 'No Name'}</Text>
-          
+
           <View style={styles.memberDetails}>
             <Text style={styles.membershipType}>
-              {item.membership_type ? item.membership_type.charAt(0).toUpperCase() + item.membership_type.slice(1) : 'Unknown'}
+              {item.membership_type
+                ? item.membership_type.charAt(0).toUpperCase() + item.membership_type.slice(1)
+                : 'Unknown'}
             </Text>
-            
+
             {item.phone_primary && (
               <Text style={styles.phoneNumber}>{item.phone_primary}</Text>
             )}
           </View>
-          
-          {item.additional_members && item.additional_members.length > 0 && (
+
+          {item.additional_members.length > 0 && (
             <Text style={styles.additionalMembers}>
               Additional members: {item.additional_members.map(m => m.name).join(', ')}
             </Text>
           )}
-          
-          {item.vehicles && item.vehicles.length > 0 && (
+
+          {item.vehicles.length > 0 && (
             <Text style={styles.vehicles}>
               Vehicles: {item.vehicles.map(v => v.license_plate).join(', ')}
             </Text>
           )}
         </View>
-        
-        {/* Check-in status indicator */}
+
         <View style={styles.statusContainer}>
           {isCheckedIn ? (
             <View style={styles.checkedInBadge}>
               <Text style={styles.checkedInText}>Checked In</Text>
             </View>
           ) : (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.checkInButton}
-              onPress={() => handleCheckIn(item)}
+              onPress={() => {
+                setActionMember(item);
+                setActionModalVisible(true);
+              }}
             >
               <Text style={styles.checkInButtonText}>Check In</Text>
             </TouchableOpacity>
@@ -277,7 +187,6 @@ const CheckInScreen = () => {
     );
   };
 
-  // Main render
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -290,7 +199,7 @@ const CheckInScreen = () => {
             <Text style={styles.backButtonText}>← Back</Text>
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
@@ -301,15 +210,12 @@ const CheckInScreen = () => {
             autoCorrect={false}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity 
-              style={styles.clearButton}
-              onPress={() => setSearchQuery('')}
-            >
+            <TouchableOpacity style={styles.clearButton} onPress={() => setSearchQuery('')}>
               <Text style={styles.clearButtonText}>×</Text>
             </TouchableOpacity>
           )}
         </View>
-        
+
         {isLoading ? (
           <ActivityIndicator size="large" color="#4FB8CE" style={styles.loader} />
         ) : (
@@ -328,12 +234,105 @@ const CheckInScreen = () => {
               <FlatList
                 data={filteredMembers}
                 renderItem={renderMemberItem}
-                keyExtractor={(item) => item.profile_id.toString()}
+                keyExtractor={item => item.profile_id.toString()}
                 contentContainerStyle={styles.memberList}
               />
             )}
           </>
         )}
+
+        {/* Action Modal */}
+        <Modal
+          visible={actionModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActionModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>{actionMember?.name}</Text>
+              <Text style={{ marginBottom: 20 }}>Select an action:</Text>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.submitButton]}
+                  onPress={() => {
+                    if (actionMember) completeCheckIn(actionMember, []);
+                    setActionModalVisible(false);
+                  }}
+                  disabled={actionMember ? todaysCheckins.includes(actionMember.profile_id) : true}
+                >
+                  <Text style={styles.buttonText}>Check In</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    if (actionMember) promptForGuests(actionMember);
+                    setActionModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.buttonText}>Add Guests</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Guest Modal */}
+        <Modal
+          visible={guestModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setGuestModalVisible(false);
+            if (selectedMember) completeCheckIn(selectedMember, []);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>
+                Add Guests for {selectedMember?.name || "Member"}
+              </Text>
+
+              <TextInput
+                style={styles.guestInput}
+                placeholder="Guest name"
+                value={guestName}
+                onChangeText={setGuestName}
+                autoFocus={true}
+              />
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setGuestModalVisible(false);
+                    setGuestName('');
+                    if (selectedMember) completeCheckIn(selectedMember, []);
+                  }}
+                >
+                  <Text style={styles.buttonText}>No Guests</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.submitButton]}
+                  onPress={() => {
+                    if (guestName.trim() !== '') {
+                      handleGuestSubmission([{ name: guestName, notes: 'Added via check-in' }]);
+                      setGuestName('');
+                    } else {
+                      setGuestModalVisible(false);
+                      if (selectedMember) completeCheckIn(selectedMember, []);
+                    }
+                  }}
+                >
+                  <Text style={styles.buttonText}>Add Guest</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -509,6 +508,59 @@ const styles = StyleSheet.create({
   checkInButtonText: {
     color: 'white',
     fontSize: 12,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#0066cc',
+  },
+  guestInput: {
+    width: '100%',
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalButton: {
+    padding: 10,
+    borderRadius: 10,
+    width: '48%',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#ccc',
+  },
+  submitButton: {
+    backgroundColor: '#5FAD56',
+  },
+  buttonText: {
+    color: 'white',
     fontWeight: 'bold',
   },
 });

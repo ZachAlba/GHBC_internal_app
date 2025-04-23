@@ -5,12 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import CheckInScreen from './CheckInScreen';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-
-// Define the type for your navigation stack
-type RootStackParamList = {
-  HomeScreen: undefined;
-  CheckInScreen: undefined;
-};
+import { RootStackParamList } from '../types/types'; 
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'HomeScreen'>;
 
@@ -82,7 +77,7 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
       const data = await response.json();
       
       if (data.status === 200) {
-        // The API returns data in a specific format as seen in member_data_2025-04-10.json
+        // The API returns data in a specific format
         // Structure: { status, message, data: { metadata, members }, api_version, timestamp }
         
         // Verify the expected structure is present
@@ -170,7 +165,7 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
         // Successfully uploaded - clear today's check-ins
         await AsyncStorage.setItem('@todays_checkins', JSON.stringify([]));
         
-        const stats = result.data;
+        const stats = result.data.checkins;
         Alert.alert('Success', 
           `Check-in data uploaded successfully!\n` +
           `Total: ${stats.total}\n` +
