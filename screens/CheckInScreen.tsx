@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  StyleSheet,
   View,
   Text,
   TextInput,
@@ -18,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Member, CheckIn, RootStackParamList } from '../types/types';
 import * as DataStorage from '../utils/DataStorage';
+import styles from '../styles/CheckInStyles';
 
 type CheckInScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CheckInScreen'>;
 
@@ -76,16 +76,13 @@ const CheckInScreen = () => {
     }
   };
 
-  const handleCheckIn = (member: Member) => {
-    if (todaysCheckins.includes(member.profile_id)) {
-      Alert.alert('Already Checked In', `${member.name} is already checked in today.`);
-      return;
-    }
+  const handleMemberPress = (member: Member) => {
     setActionMember(member);
     setActionModalVisible(true);
   };
 
   const promptForGuests = async (member: Member) => {
+    // We can add guests even if the member is already checked in
     setSelectedMember(member);
     setGuestNames(['', '', '', '', '']);
     
@@ -107,7 +104,27 @@ const CheckInScreen = () => {
         .filter(name => name.trim() !== '')
         .map(name => ({ name, notes: 'Added via check-in' }));
       
-      completeCheckIn(selectedMember, validGuests);
+      if (validGuests.length === 0) {
+        setGuestModalVisible(false);
+        setSelectedMember(null);
+        return;
+      }
+      
+      // Check if member is already checked in
+      const isAlreadyCheckedIn = todaysCheckins.includes(selectedMember.profile_id);
+      
+      if (isAlreadyCheckedIn) {
+        // If already checked in, we need to update the check-in record
+        // This would require a new utility function to add guests to an existing check-in
+        Alert.alert(
+          'Member Already Checked In',
+          `${selectedMember.name} is already checked in. Adding guests to an existing check-in is not supported yet.`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        // Normal check-in with guests
+        completeCheckIn(selectedMember, validGuests);
+      }
     }
     setGuestModalVisible(false);
     setSelectedMember(null);
@@ -146,10 +163,7 @@ const CheckInScreen = () => {
           styles.memberItem,
           isCheckedIn && styles.checkedInMember
         ]}
-        onPress={() => {
-          setActionMember(item);
-          setActionModalVisible(true);
-        }}
+        onPress={() => handleMemberPress(item)}
       >
         <View style={styles.memberInfo}>
           <Text style={styles.memberName}>{item.name || 'No Name'}</Text>
@@ -187,7 +201,7 @@ const CheckInScreen = () => {
           ) : (
             <TouchableOpacity
               style={styles.checkInButton}
-              onPress={() => handleCheckIn(item)}
+              onPress={() => completeCheckIn(item, [])}
             >
               <Text style={styles.checkInButtonText}>Check In</Text>
             </TouchableOpacity>
@@ -271,7 +285,9 @@ const CheckInScreen = () => {
                     (actionMember && todaysCheckins.includes(actionMember.profile_id)) && styles.disabledButton
                   ]}
                   onPress={() => {
-                    if (actionMember) completeCheckIn(actionMember, []);
+                    if (actionMember && !todaysCheckins.includes(actionMember.profile_id)) {
+                      completeCheckIn(actionMember, []);
+                    }
                     setActionModalVisible(false);
                   }}
                   disabled={actionMember ? todaysCheckins.includes(actionMember.profile_id) : true}
@@ -282,7 +298,9 @@ const CheckInScreen = () => {
                 <TouchableOpacity
                   style={[styles.modalButton, styles.secondaryButton]}
                   onPress={() => {
-                    if (actionMember) promptForGuests(actionMember);
+                    if (actionMember) {
+                      promptForGuests(actionMember);
+                    }
                     setActionModalVisible(false);
                   }}
                 >
@@ -300,7 +318,7 @@ const CheckInScreen = () => {
           animationType="slide"
           onRequestClose={() => {
             setGuestModalVisible(false);
-            if (selectedMember) completeCheckIn(selectedMember, []);
+            setSelectedMember(null);
           }}
         >
           <View style={styles.modalOverlay}>
@@ -354,10 +372,10 @@ const CheckInScreen = () => {
                   onPress={() => {
                     setGuestModalVisible(false);
                     setGuestNames(['', '', '', '', '']);
-                    if (selectedMember) completeCheckIn(selectedMember, []);
+                    setSelectedMember(null);
                   }}
                 >
-                  <Text style={styles.buttonText}>No Guests</Text>
+                  <Text style={styles.buttonText}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -374,269 +392,5 @@ const CheckInScreen = () => {
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#e6f2ff',
-  },
-  keyboardAvoidView: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#0066cc',
-  },
-  backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#0066cc',
-    fontWeight: '500',
-  },
-  searchContainer: {
-    margin: 16,
-    position: 'relative',
-  },
-  searchInput: {
-    backgroundColor: 'white',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 15,
-    fontSize: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  clearButton: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    transform: [{ translateY: -12 }],
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#ccc',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  clearButtonText: {
-    fontSize: 18,
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  searchPrompt: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  searchPromptText: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 16,
-  },
-  noResults: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noResultsText: {
-    color: '#666',
-    fontSize: 16,
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  memberList: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  memberItem: {
-    backgroundColor: 'white',
-    marginVertical: 8,
-    borderRadius: 15,
-    padding: 16,
-    flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  checkedInMember: {
-    backgroundColor: '#e6ffee', // Light green
-    borderColor: '#5FAD56',
-    borderWidth: 1,
-  },
-  memberInfo: {
-    flex: 1,
-  },
-  memberName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  memberDetails: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  membershipType: {
-    backgroundColor: '#4FB8CE',
-    color: 'white',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    fontSize: 12,
-    marginRight: 8,
-    overflow: 'hidden',
-  },
-  phoneNumber: {
-    color: '#666',
-    fontSize: 14,
-  },
-  additionalMembers: {
-    fontSize: 14,
-    color: '#444',
-    marginTop: 4,
-  },
-  vehicles: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  statusContainer: {
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  checkedInBadge: {
-    backgroundColor: '#5FAD56',
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  checkedInText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  checkInButton: {
-    backgroundColor: '#FFB347',
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  checkInButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    width: '80%',
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#0066cc',
-  },
-  guestListContainer: {
-    width: '100%',
-    maxHeight: 300,
-    marginBottom: 15,
-  },
-  guestInput: {
-    width: '100%',
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  modalButton: {
-    padding: 10,
-    borderRadius: 10,
-    width: '48%',
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#ccc',
-  },
-  submitButton: {
-    backgroundColor: '#5FAD56',
-  },
-  secondaryButton: {
-    backgroundColor: '#FFB347',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  previousGuestsContainer: {
-    width: '100%',
-    marginBottom: 15,
-  },
-  previousGuestsTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#444',
-  },
-  previousGuestsScroll: {
-    maxHeight: 40,
-  },
-  previousGuestTag: {
-    backgroundColor: '#E8F4F8',
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#4FB8CE',
-  },
-  previousGuestTagText: {
-    color: '#0066cc',
-    fontSize: 12,
-  }
-});
 
 export default CheckInScreen;
