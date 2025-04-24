@@ -43,6 +43,10 @@ const HomeStyles = StyleSheet.create({
     color: COLORS.darkGray,
     marginTop: 4,
   },
+  warningText: {
+    color: '#e74c3c', // Red for warning
+    fontWeight: 'bold',
+  },
   offlineText: {
     fontSize: 14,
     color: '#e74c3c',

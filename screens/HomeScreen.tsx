@@ -1,11 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { Text, View, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import CheckInScreen from './CheckInScreen';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../types/types'; 
+import { RootStackParamList, ApiResponse, UploadData } from '../types/types';
+import * as DataStorage from '../utils';
+import styles from '../styles/HomeStyles';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'HomeScreen'>;
 
@@ -13,35 +14,39 @@ type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'H
 const API_BASE_URL = 'https://greenhillbeachclub.net/accounts/api';
 const API_KEY = process.env.EXPO_PUBLIC_API_KEY;
 
-export default function HomeScreen({ navigation }: { navigation: HomeScreenNavigationProp }){
+export default function HomeScreen({ navigation }: { navigation: HomeScreenNavigationProp }) {
   const [isLoading, setIsLoading] = useState(false);
   const [hasDownloadedData, setHasDownloadedData] = useState(false);
+  const [isDataDownloadedToday, setIsDataDownloadedToday] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [lastDownloadDate, setLastDownloadDate] = useState<string | null>(null);
-  
-  
+
   // Check if we have stored data when app launches
   useEffect(() => {
     checkLocalData();
-    
+
     // Set up network connectivity listener
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsConnected(state.isConnected ?? false);
     });
-    
+
     return () => {
       unsubscribe();
     };
   }, []);
-  
+
   // Check if we have member data stored locally
   const checkLocalData = async () => {
     try {
-      const memberData = await AsyncStorage.getItem('@member_data');
-      const lastDownload = await AsyncStorage.getItem('@last_download_date');
-      
+      const memberData = await DataStorage.getMemberData();
+      const lastDownload = await AsyncStorage.getItem(DataStorage.LAST_DOWNLOAD_DATE_KEY);
+
       setHasDownloadedData(memberData !== null);
-      
+
+      // Check if data was downloaded today
+      const downloadedToday = await DataStorage.wasDataDownloadedToday();
+      setIsDataDownloadedToday(downloadedToday);
+
       if (lastDownload) {
         const date = new Date(lastDownload);
         setLastDownloadDate(date.toLocaleDateString());
@@ -57,9 +62,9 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
       Alert.alert('No Connection', 'You need internet connection to download data');
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       // Make API request to download member data
       const response = await fetch(`${API_BASE_URL}/download.php`, {
@@ -69,37 +74,30 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
           'Content-Type': 'application/json'
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      
-      const data = await response.json();
-      
-      if (data.status === 200) {
-        // The API returns data in a specific format
-        // Structure: { status, message, data: { metadata, members }, api_version, timestamp }
-        
-        // Verify the expected structure is present
-        if (!data.data || !data.data.members) {
-          throw new Error('Invalid data format received from server');
-        }
-        
-        // Store the member data locally
-        await AsyncStorage.setItem('@member_data', JSON.stringify(data.data));
-        
+
+      const apiResponse = await response.json() as ApiResponse;
+
+      if (apiResponse.status === 200) {
+        // Store the member data using our utility
+        await DataStorage.storeApiData(apiResponse);
+
         // Store today's date for reference
         const today = new Date();
-        await AsyncStorage.setItem('@last_download_date', today.toISOString());
+        await AsyncStorage.setItem(DataStorage.LAST_DOWNLOAD_DATE_KEY, today.toISOString());
         setLastDownloadDate(today.toLocaleDateString());
-        
+
         // Initialize empty check-ins for today
-        await AsyncStorage.setItem('@todays_checkins', JSON.stringify([]));
-        
+        await AsyncStorage.setItem(DataStorage.TODAYS_CHECKINS_KEY, JSON.stringify([]));
+
         setHasDownloadedData(true);
-        Alert.alert('Success', `Downloaded data for ${data.data.members.length} members!`);
+        setIsDataDownloadedToday(true);
+        Alert.alert('Success', `Downloaded data for ${apiResponse.data.members.length} members!`);
       } else {
-        throw new Error(data.message || 'Failed to download data');
+        throw new Error(apiResponse.message || 'Failed to download data');
       }
     } catch (error) {
       console.error('Download error:', error);
@@ -116,32 +114,31 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
       Alert.alert('No Data', 'Please download data first before uploading');
       return;
     }
-    
+
     if (!isConnected) {
       Alert.alert('No Connection', 'You need internet connection to upload data');
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       // Get today's check-ins from storage
-      const checkInsString = await AsyncStorage.getItem('@todays_checkins');
-      const checkIns = checkInsString ? JSON.parse(checkInsString) : [];
-      
+      const checkIns = await DataStorage.getTodaysCheckins();
+
       if (checkIns.length === 0) {
         Alert.alert('No Check-ins', 'There are no check-ins to upload');
         setIsLoading(false);
         return;
       }
-      
+
       // Format matches the expected structure in upload.php
-      const uploadData = {
+      const uploadData: UploadData = {
         checkins: checkIns,
         device_id: 'gate_tablet_1', // Identify which device is uploading
         season: new Date().getFullYear().toString() // Current season as a string
       };
-      
+
       // Make API request to upload data
       const response = await fetch(`${API_BASE_URL}/upload.php`, {
         method: 'POST',
@@ -151,22 +148,19 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
         },
         body: JSON.stringify(uploadData)
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      
+
       const result = await response.json();
-      
+
       if (result.status === 200) {
-        // The API returns stats on processing
-        // Structure expected: { status, message, data: { successful, failed, duplicates, total }, api_version, timestamp }
-        
         // Successfully uploaded - clear today's check-ins
-        await AsyncStorage.setItem('@todays_checkins', JSON.stringify([]));
-        
+        await DataStorage.clearTodaysCheckins();
+
         const stats = result.data.checkins;
-        Alert.alert('Success', 
+        Alert.alert('Success',
           `Check-in data uploaded successfully!\n` +
           `Total: ${stats.total}\n` +
           `Successful: ${stats.successful}\n` +
@@ -188,12 +182,22 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
   const handleCheckInScreen = () => {
     if (!hasDownloadedData) {
       Alert.alert(
-        'No Data Available', 
+        'No Data Available',
         'Please download the latest member data first.',
         [{ text: 'OK' }]
       );
       return;
     }
+
+    if (!isDataDownloadedToday) {
+      Alert.alert(
+        'Outdated Data',
+        'Please download today\'s member data before checking in members.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     // Navigate to CheckInScreen
     navigation.navigate('CheckInScreen');
   };
@@ -202,37 +206,43 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
     <View style={styles.container}>
       <StatusBar style="auto" />
       <Text style={styles.title}>Beach Club Gate App</Text>
-      
+
       <View style={styles.statusContainer}>
         <Text style={[
-          styles.statusText, 
-          hasDownloadedData ? styles.statusActive : styles.statusInactive
+          styles.statusText,
+          hasDownloadedData ? (isDataDownloadedToday ? styles.statusActive : styles.statusInactive) : styles.statusInactive
         ]}>
-          {hasDownloadedData 
-            ? `Member data ready for check-ins` 
+          {hasDownloadedData
+            ? (isDataDownloadedToday
+              ? `Member data ready for check-ins`
+              : `Member data outdated - please download today's data`)
             : 'Please download member data first'}
         </Text>
-        
+
         {lastDownloadDate && (
-          <Text style={styles.lastDownloadText}>
+          <Text style={[
+            styles.lastDownloadText,
+            !isDataDownloadedToday && styles.warningText
+          ]}>
             Last downloaded: {lastDownloadDate}
+            {!isDataDownloadedToday && ' (outdated)'}
           </Text>
         )}
-        
+
         {!isConnected && (
           <Text style={styles.offlineText}>
             Offline Mode - Check-in will work, but you can't download or upload data
           </Text>
         )}
       </View>
-      
+
       <View style={styles.buttonContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.button, 
+            styles.button,
             styles.blueButton,
             !isConnected && styles.disabledButton
-          ]} 
+          ]}
           onPress={handleDownloadData}
           disabled={isLoading || !isConnected}
         >
@@ -242,25 +252,25 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
             <Text style={styles.buttonText}>Download Today's Data</Text>
           )}
         </TouchableOpacity>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={[
-            styles.button, 
+            styles.button,
             styles.yellowButton,
-            !hasDownloadedData && styles.disabledButton
-          ]} 
+            (!hasDownloadedData || !isDataDownloadedToday) && styles.disabledButton
+          ]}
           onPress={handleCheckInScreen}
-          disabled={!hasDownloadedData || isLoading}
+          disabled={!hasDownloadedData || !isDataDownloadedToday || isLoading}
         >
           <Text style={styles.buttonText}>Check In Members</Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={[
-            styles.button, 
+            styles.button,
             styles.orangeButton,
             (!hasDownloadedData || !isConnected) && styles.disabledButton
-          ]} 
+          ]}
           onPress={handleUploadData}
           disabled={!hasDownloadedData || isLoading || !isConnected}
         >
@@ -274,90 +284,3 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#e6f2ff', // Light blue background for beach theme
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#0066cc', // Deeper blue for text
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  statusContainer: {
-    marginBottom: 30,
-    padding: 15,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    minWidth: 250,
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginBottom: 5,
-  },
-  statusActive: {
-    color: '#00a86b', // Green for active status
-  },
-  statusInactive: {
-    color: '#cc5500', // Orange for inactive status
-  },
-  lastDownloadText: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  offlineText: {
-    fontSize: 14,
-    color: '#e74c3c',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  buttonContainer: {
-    width: '100%',
-    maxWidth: 400,
-  },
-  button: {
-    padding: 18,
-    borderRadius: 15,
-    marginBottom: 20,
-    alignItems: 'center',
-    // Add shadow for depth
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  blueButton: {
-    backgroundColor: '#4FB8CE', // Ocean blue
-  },
-  yellowButton: {
-    backgroundColor: '#FFB347', // Sandy orange
-  },
-  orangeButton: {
-    backgroundColor: '#5FAD56', // Beach grass green
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-    textShadowColor: 'rgba(0, 0, 0, 0.15)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-  },
-});

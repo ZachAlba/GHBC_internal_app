@@ -16,7 +16,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Member, CheckIn, RootStackParamList } from '../types/types';
-import * as DataStorage from '../utils/DataStorage';
+import * as DataStorage from '../utils';
 import styles from '../styles/CheckInStyles';
 
 type CheckInScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CheckInScreen'>;
@@ -82,9 +82,42 @@ const CheckInScreen = () => {
   };
 
   const promptForGuests = async (member: Member) => {
-    // We can add guests even if the member is already checked in
     setSelectedMember(member);
-    setGuestNames(['', '', '', '', '']);
+    
+    // Check if member is already checked in today
+    const isAlreadyCheckedIn = todaysCheckins.includes(member.profile_id);
+    
+    if (isAlreadyCheckedIn) {
+      try {
+        // Get existing check-in to determine remaining guest slots
+        const checkIns = await DataStorage.getTodaysCheckins();
+        const existingCheckIn = checkIns.find(checkIn => checkIn.profile_id === member.profile_id);
+        
+        if (existingCheckIn) {
+          const currentGuestCount = existingCheckIn.guests.length;
+          const remainingSlots = Math.max(0, 5 - currentGuestCount);
+          
+          if (remainingSlots === 0) {
+            Alert.alert(
+              'Maximum Guests Reached',
+              `${member.name || 'This member'} already has 5 guests checked in today.`,
+              [{ text: 'OK' }]
+            );
+            setSelectedMember(null);
+            return;
+          }
+          
+          // Initialize only the remaining number of slots
+          setGuestNames(Array(remainingSlots).fill(''));
+        }
+      } catch (error) {
+        console.error('Error checking existing guests:', error);
+        setGuestNames(['', '', '', '', '']);
+      }
+    } else {
+      // For new check-ins, show all 5 slots
+      setGuestNames(['', '', '', '', '']);
+    }
     
     // Load previous guests for this member
     try {
@@ -110,17 +143,19 @@ const CheckInScreen = () => {
         return;
       }
       
-      // Check if member is already checked in
+      // Check if member is already checked in today
       const isAlreadyCheckedIn = todaysCheckins.includes(selectedMember.profile_id);
       
       if (isAlreadyCheckedIn) {
-        // If already checked in, we need to update the check-in record
-        // This would require a new utility function to add guests to an existing check-in
-        Alert.alert(
-          'Member Already Checked In',
-          `${selectedMember.name} is already checked in. Adding guests to an existing check-in is not supported yet.`,
-          [{ text: 'OK' }]
-        );
+        // Use the utility function to add guests to existing check-in
+        const result = await DataStorage.addGuestsToExistingCheckIn(selectedMember.profile_id, validGuests);
+        if (result.success) {
+          Alert.alert('Guests Added', result.message, [{ text: 'OK' }]);
+          // Refresh the data after adding guests
+          loadMemberData();
+        } else {
+          Alert.alert('Error', result.message, [{ text: 'OK' }]);
+        }
       } else {
         // Normal check-in with guests
         completeCheckIn(selectedMember, validGuests);
