@@ -132,11 +132,12 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
         return;
       }
 
+      
       // Format matches the expected structure in upload.php
       const uploadData: UploadData = {
         checkins: checkIns,
         device_id: 'gate_tablet_1', // Identify which device is uploading
-        season: new Date().getFullYear().toString() // Current season as a string
+        season: DataStorage.getCurrentSeason() // Get current season
       };
 
       // Make API request to upload data
