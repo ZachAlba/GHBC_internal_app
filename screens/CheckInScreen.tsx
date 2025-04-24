@@ -11,12 +11,13 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
-  Modal
+  Modal,
+  ScrollView
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Member, CheckIn, RootStackParamList } from '../types/types';
+import * as DataStorage from '../utils/DataStorage';
 
 type CheckInScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CheckInScreen'>;
 
@@ -31,9 +32,9 @@ const CheckInScreen = () => {
 
   const [guestModalVisible, setGuestModalVisible] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [guestName, setGuestName] = useState('');
+  const [guestNames, setGuestNames] = useState<string[]>(['', '', '', '', '']);
+  const [previousGuests, setPreviousGuests] = useState<string[]>([]);
 
-  // ↓ NEW: action modal state ↓
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [actionMember, setActionMember] = useState<Member | null>(null);
 
@@ -60,13 +61,13 @@ const CheckInScreen = () => {
   const loadMemberData = async () => {
     setIsLoading(true);
     try {
-      const memberDataString = await AsyncStorage.getItem('@member_data');
-      if (!memberDataString) throw new Error('No member data found');
-      const memberData = JSON.parse(memberDataString);
-      setMembers(memberData.members || []);
-      const checkInsString = await AsyncStorage.getItem('@todays_checkins');
-      const checkIns = checkInsString ? JSON.parse(checkInsString) : [];
-      setTodaysCheckins(checkIns.map((c: CheckIn) => c.profile_id));
+      // Get all members using our storage utility
+      const allMembers = await DataStorage.getAllMembers();
+      setMembers(allMembers);
+      
+      // Get today's check-ins
+      const checkIns = await DataStorage.getTodaysCheckins();
+      setTodaysCheckins(checkIns.map(c => c.profile_id));
     } catch (error) {
       console.error('Error loading member data:', error);
       Alert.alert('Error', 'Failed to load member data. Please go back and download data again.');
@@ -75,7 +76,6 @@ const CheckInScreen = () => {
     }
   };
 
-  // ↓ UPDATED: open action modal instead of immediate Alert ↓
   const handleCheckIn = (member: Member) => {
     if (todaysCheckins.includes(member.profile_id)) {
       Alert.alert('Already Checked In', `${member.name} is already checked in today.`);
@@ -85,39 +85,52 @@ const CheckInScreen = () => {
     setActionModalVisible(true);
   };
 
-  const promptForGuests = (member: Member) => {
+  const promptForGuests = async (member: Member) => {
     setSelectedMember(member);
-    setGuestName('');
+    setGuestNames(['', '', '', '', '']);
+    
+    // Load previous guests for this member
+    try {
+      const previousGuestsList = await DataStorage.getPreviousGuests(member.profile_id);
+      setPreviousGuests(previousGuestsList);
+    } catch (error) {
+      console.error('Error loading previous guests:', error);
+      setPreviousGuests([]);
+    }
+    
     setGuestModalVisible(true);
   };
 
-  const handleGuestSubmission = (guests: Array<{ name: string; notes?: string }>) => {
-    if (selectedMember) completeCheckIn(selectedMember, guests);
+  const handleGuestSubmission = async () => {
+    if (selectedMember) {
+      const validGuests = guestNames
+        .filter(name => name.trim() !== '')
+        .map(name => ({ name, notes: 'Added via check-in' }));
+      
+      completeCheckIn(selectedMember, validGuests);
+    }
     setGuestModalVisible(false);
     setSelectedMember(null);
   };
 
+  const selectPreviousGuest = (guestName: string, index: number) => {
+    const newGuestNames = [...guestNames];
+    newGuestNames[index] = guestName;
+    setGuestNames(newGuestNames);
+  };
+
   const completeCheckIn = async (member: Member, guests: Array<{ name: string; notes?: string }>) => {
     try {
-      const now = new Date();
-      const checkin: CheckIn = {
-        profile_id: member.profile_id,
-        check_in_date: now.toISOString().split('T')[0],
-        check_in_time: now.toTimeString().split(' ')[0],
-        guests
-      };
-
-      const checkInsString = await AsyncStorage.getItem('@todays_checkins');
-      const checkIns = checkInsString ? JSON.parse(checkInsString) : [];
-      checkIns.push(checkin);
-      await AsyncStorage.setItem('@todays_checkins', JSON.stringify(checkIns));
-      setTodaysCheckins([...todaysCheckins, member.profile_id]);
-
-      const guestText = guests.length > 0
-        ? ` with ${guests.length} guest${guests.length > 1 ? 's' : ''}`
-        : '';
-      Alert.alert('Check-in Successful', `${member.name} has been checked in${guestText}!`, [{ text: 'OK' }]);
-      setSearchQuery('');
+      const result = await DataStorage.addCheckIn(member, guests);
+      
+      if (result.success) {
+        Alert.alert('Check-in Successful', result.message, [{ text: 'OK' }]);
+        // Update the local todaysCheckins state to include this member
+        setTodaysCheckins(prev => [...prev, member.profile_id]);
+        setSearchQuery('');
+      } else {
+        Alert.alert('Check-in Failed', result.message, [{ text: 'OK' }]);
+      }
     } catch (error) {
       console.error('Complete check-in error:', error);
       Alert.alert('Error', 'Failed to save check-in data');
@@ -174,10 +187,7 @@ const CheckInScreen = () => {
           ) : (
             <TouchableOpacity
               style={styles.checkInButton}
-              onPress={() => {
-                setActionMember(item);
-                setActionModalVisible(true);
-              }}
+              onPress={() => handleCheckIn(item)}
             >
               <Text style={styles.checkInButtonText}>Check In</Text>
             </TouchableOpacity>
@@ -255,7 +265,11 @@ const CheckInScreen = () => {
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.submitButton]}
+                  style={[
+                    styles.modalButton, 
+                    styles.submitButton,
+                    (actionMember && todaysCheckins.includes(actionMember.profile_id)) && styles.disabledButton
+                  ]}
                   onPress={() => {
                     if (actionMember) completeCheckIn(actionMember, []);
                     setActionModalVisible(false);
@@ -266,7 +280,7 @@ const CheckInScreen = () => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
+                  style={[styles.modalButton, styles.secondaryButton]}
                   onPress={() => {
                     if (actionMember) promptForGuests(actionMember);
                     setActionModalVisible(false);
@@ -294,21 +308,52 @@ const CheckInScreen = () => {
               <Text style={styles.modalTitle}>
                 Add Guests for {selectedMember?.name || "Member"}
               </Text>
-
-              <TextInput
-                style={styles.guestInput}
-                placeholder="Guest name"
-                value={guestName}
-                onChangeText={setGuestName}
-                autoFocus={true}
-              />
+              
+              {previousGuests.length > 0 && (
+                <View style={styles.previousGuestsContainer}>
+                  <Text style={styles.previousGuestsTitle}>Previous Guests:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previousGuestsScroll}>
+                    {previousGuests.map((guestName, index) => (
+                      <TouchableOpacity 
+                        key={index} 
+                        style={styles.previousGuestTag}
+                        onPress={() => {
+                          // Find first empty or select input field
+                          const emptyIndex = guestNames.findIndex(name => name === '');
+                          const targetIndex = emptyIndex >= 0 ? emptyIndex : 0;
+                          selectPreviousGuest(guestName, targetIndex);
+                        }}
+                      >
+                        <Text style={styles.previousGuestTagText}>{guestName}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+              
+              <ScrollView style={styles.guestListContainer}>
+                {guestNames.map((guestName, index) => (
+                  <TextInput
+                    key={index}
+                    style={styles.guestInput}
+                    placeholder={`Guest ${index + 1} name`}
+                    value={guestName}
+                    onChangeText={(text) => {
+                      const newGuestNames = [...guestNames];
+                      newGuestNames[index] = text;
+                      setGuestNames(newGuestNames);
+                    }}
+                    autoFocus={index === 0}
+                  />
+                ))}
+              </ScrollView>
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
                   onPress={() => {
                     setGuestModalVisible(false);
-                    setGuestName('');
+                    setGuestNames(['', '', '', '', '']);
                     if (selectedMember) completeCheckIn(selectedMember, []);
                   }}
                 >
@@ -317,17 +362,9 @@ const CheckInScreen = () => {
 
                 <TouchableOpacity
                   style={[styles.modalButton, styles.submitButton]}
-                  onPress={() => {
-                    if (guestName.trim() !== '') {
-                      handleGuestSubmission([{ name: guestName, notes: 'Added via check-in' }]);
-                      setGuestName('');
-                    } else {
-                      setGuestModalVisible(false);
-                      if (selectedMember) completeCheckIn(selectedMember, []);
-                    }
-                  }}
+                  onPress={() => handleGuestSubmission()}
                 >
-                  <Text style={styles.buttonText}>Add Guest</Text>
+                  <Text style={styles.buttonText}>Add Guests</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -534,13 +571,18 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     color: '#0066cc',
   },
+  guestListContainer: {
+    width: '100%',
+    maxHeight: 300,
+    marginBottom: 15,
+  },
   guestInput: {
     width: '100%',
     padding: 10,
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 10,
-    marginBottom: 15,
+    marginBottom: 10,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -559,10 +601,42 @@ const styles = StyleSheet.create({
   submitButton: {
     backgroundColor: '#5FAD56',
   },
+  secondaryButton: {
+    backgroundColor: '#FFB347',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
   buttonText: {
     color: 'white',
     fontWeight: 'bold',
   },
+  previousGuestsContainer: {
+    width: '100%',
+    marginBottom: 15,
+  },
+  previousGuestsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#444',
+  },
+  previousGuestsScroll: {
+    maxHeight: 40,
+  },
+  previousGuestTag: {
+    backgroundColor: '#E8F4F8',
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#4FB8CE',
+  },
+  previousGuestTagText: {
+    color: '#0066cc',
+    fontSize: 12,
+  }
 });
 
 export default CheckInScreen;
