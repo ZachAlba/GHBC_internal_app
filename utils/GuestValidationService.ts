@@ -10,29 +10,36 @@ import { getCurrentSeason, getSeasonFromDate } from './Utils';
  */
 export const getGuestVisitCount = async (
   guestName: string,
-  todaysCheckIns: CheckIn[]
+  todaysCheckIns: CheckIn[],
+  profileId: number
 ): Promise<number> => {
   try {
     const members = await getAllMembers();
     const currentSeason = getCurrentSeason();
     let count = 0;
     
-    // Count historical visits for this guest in the current season
-    members.forEach(member => {
-      if (member.guest_visits && member.guest_visits.length > 0) {
-        member.guest_visits.forEach(visit => {
-          if (
-            getSeasonFromDate(visit.visit_date) === currentSeason &&
-            visit.guest_name.toLowerCase() === guestName.toLowerCase()
-          ) {
-            count++;
-          }
-        });
-      }
-    });
+    const member = members.find(m => m.profile_id === profileId);
+    if (!member) {
+      console.warn(`Member with profile_id ${profileId} not found.`);
+      return 0;
+    }
     
-    // Also check today's check-ins for this guest
-    todaysCheckIns.forEach(checkIn => {
+    // Only check this member's guest_visits
+    if (member.guest_visits && member.guest_visits.length > 0) {
+      member.guest_visits.forEach(visit => {
+        const visitSeason = getSeasonFromDate(visit.visit_date);
+        if (
+          visitSeason === currentSeason &&
+          visit.guest_name.toLowerCase() === guestName.toLowerCase()
+        ) {
+          count++;
+        }
+      });
+    }
+    
+    // Also check today's check-ins for this member only
+    const memberCheckins = todaysCheckIns.filter(checkIn => checkIn.profile_id === profileId);
+    memberCheckins.forEach(checkIn => {
       checkIn.guests.forEach(guest => {
         if (guest.name.toLowerCase() === guestName.toLowerCase()) {
           count++;
@@ -103,8 +110,8 @@ export const validateGuestVisitLimit = async (
     return false;
   }
   
-  const visitCount = await getGuestVisitCount(guest.name, todaysCheckIns);
-  if (visitCount >= 3) {
+  const visitCount = await getGuestVisitCount(guest.name, todaysCheckIns, profileId);
+  if (visitCount > 3) {
     await createAlert({
       profile_id: profileId,
       guest_name: guest.name,
