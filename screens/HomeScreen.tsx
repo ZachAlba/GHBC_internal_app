@@ -11,9 +11,6 @@ import {Upload, Download} from '../utils/Api';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'HomeScreen'>;
 
-// API configuration
-const API_BASE_URL = 'https://greenhillbeachclub.net/accounts/api';
-const API_KEY = process.env.EXPO_PUBLIC_API_KEY;
 
 export default function HomeScreen({ navigation }: { navigation: HomeScreenNavigationProp }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -67,35 +64,20 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
     setIsLoading(true);
 
     try {
-      // Make API request to download member data
-      const response = await fetch(`${API_BASE_URL}/download.php`, {
-        method: 'GET',
-        headers: {
-          'X-Api-Key': API_KEY,
-          'Content-Type': 'application/json'
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const apiResponse = await response.json() as ApiResponse;
-
+      const apiResponse = await Download();
+  
       if (apiResponse.status === 200) {
-        // Store the member data using our utility
         await DataStorage.storeApiData(apiResponse);
-
-        // Store today's date for reference
+  
         const today = new Date();
         await AsyncStorage.setItem(DataStorage.LAST_DOWNLOAD_DATE_KEY, today.toISOString());
         setLastDownloadDate(today.toLocaleDateString());
-
-        // Initialize empty check-ins for today
+  
         await AsyncStorage.setItem(DataStorage.TODAYS_CHECKINS_KEY, JSON.stringify([]));
-
+  
         setHasDownloadedData(true);
         setIsDataDownloadedToday(true);
+  
         Alert.alert('Success', `Downloaded data for ${apiResponse.data.members.length} members!`);
       } else {
         throw new Error(apiResponse.message || 'Failed to download data');
