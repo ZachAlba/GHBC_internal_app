@@ -70,10 +70,22 @@ export interface ApiResponse {
 // Structure for uploading check-ins to the server
 export interface UploadData {
   checkins: CheckIn[];
+  alerts: AlertUpload[];
   device_id: string;
   season: string;
 }
 
+// Alerts
+export interface AlertUpload {
+  profile_id: number;
+  guest_name?: string;
+  visit_date?: string;
+  season?: string;
+  type: string;
+  alert_message: string;
+}
+
+// Navigation types for React Navigation
 export type RootStackParamList = {
   HomeScreen: undefined;
   CheckInScreen: undefined;

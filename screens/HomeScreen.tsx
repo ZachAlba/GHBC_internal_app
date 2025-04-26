@@ -114,33 +114,31 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
       Alert.alert('No Data', 'Please download data first before uploading');
       return;
     }
-
+  
     if (!isConnected) {
       Alert.alert('No Connection', 'You need internet connection to upload data');
       return;
     }
-
+  
     setIsLoading(true);
-
+  
     try {
-      // Get today's check-ins from storage
       const checkIns = await DataStorage.getTodaysCheckins();
-
-      if (checkIns.length === 0) {
-        Alert.alert('No Check-ins', 'There are no check-ins to upload');
+      const alerts = await DataStorage.getTodaysAlerts(); // <-- get alerts
+  
+      if (checkIns.length === 0 && alerts.length === 0) {
+        Alert.alert('No Data', 'There are no check-ins or alerts to upload');
         setIsLoading(false);
         return;
       }
-
-      
-      // Format matches the expected structure in upload.php
+  
       const uploadData: UploadData = {
         checkins: checkIns,
-        device_id: 'gate_tablet_1', // Identify which device is uploading
-        season: DataStorage.getCurrentSeason() // Get current season
+        alerts: alerts, // <-- include alerts
+        device_id: 'gate_tablet_1',
+        season: new Date().getFullYear().toString()
       };
-
-      // Make API request to upload data
+  
       const response = await fetch(`${API_BASE_URL}/upload.php`, {
         method: 'POST',
         headers: {
@@ -149,21 +147,21 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
         },
         body: JSON.stringify(uploadData)
       });
-
+  
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-
+  
       const result = await response.json();
-
+  
       if (result.status === 200) {
-        // Successfully uploaded - clear today's check-ins
         await DataStorage.clearTodaysCheckins();
-
+        await DataStorage.clearTodaysAlerts(); // <-- clear alerts too
+  
         const stats = result.data.checkins;
         Alert.alert('Success',
-          `Check-in data uploaded successfully!\n` +
-          `Total: ${stats.total}\n` +
+          `Data uploaded successfully!\n` +
+          `Check-ins: ${stats.total}\n` +
           `Successful: ${stats.successful}\n` +
           `Failed: ${stats.failed}\n` +
           `Duplicates: ${stats.duplicates || 0}`
@@ -179,6 +177,7 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
       setIsLoading(false);
     }
   };
+  
 
   const handleCheckInScreen = () => {
     if (!hasDownloadedData) {

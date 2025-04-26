@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CheckIn, Member, UploadData } from '../types/types';
+import { CheckIn, Member, UploadData, AlertUpload } from '../types/types';
 import { getMemberName } from './MemberStorageService';
 import { 
   validateGuestCount, 
@@ -9,6 +9,7 @@ import {
 
 // Storage key
 export const TODAYS_CHECKINS_KEY = '@todays_checkins';
+export const TODAYS_ALERTS_KEY = '@todays_alerts';
 
 /**
  * Gets today's check-ins from AsyncStorage
@@ -45,10 +46,12 @@ export const initializeTodaysCheckins = async (): Promise<void> => {
  */
 export const prepareUploadData = async (deviceId: string): Promise<UploadData> => {
   const checkins = await getTodaysCheckins();
+  const alerts = await getTodaysAlerts(); 
   const season = new Date().getFullYear().toString();
   
   return {
     checkins,
+    alerts,
     device_id: deviceId,
     season
   };
@@ -114,7 +117,7 @@ const handleGuestCheckIn = async (
       : [];
     
     // Process and validate guests
-    const { processedGuests, guestsOverLimit } = await processGuests(guests, existingGuestNames);
+    const { processedGuests, guestsOverLimit } = await processGuests(guests, profileId, existingGuestNames);
     
     if (!isAddingToExisting) {
       // Create a new check-in record
@@ -184,4 +187,61 @@ export const addGuestsToExistingCheckIn = async (
 ): Promise<{ success: boolean; message: string }> => {
   const memberName = await getMemberName(profileId);
   return handleGuestCheckIn(profileId, memberName, newGuests, true);
+};
+
+
+
+// Get today's alerts
+export const getTodaysAlerts = async (): Promise<AlertUpload[]> => {
+  try {
+    const alertsString = await AsyncStorage.getItem(TODAYS_ALERTS_KEY);
+    return alertsString ? JSON.parse(alertsString) : [];
+  } catch (error) {
+    console.error('Error retrieving today\'s alerts:', error);
+    return [];
+  }
+};
+
+// Core function to create a new alert
+export const createAlert = async (params: {
+  profile_id: number;
+  guest_name?: string;
+  visit_date?: string;
+  season?: string;
+  type: string;
+  alert_message: string;
+}): Promise<void> => {
+  try {
+    const existingAlerts = await getTodaysAlerts();
+
+    const now = new Date();
+    const visitDate = params.visit_date || now.toISOString().split('T')[0];
+    const season = params.season || `${now.getMonth() >= 4 && now.getMonth() <= 9 ? 'S' : 'W'}${now.getFullYear()}`;
+
+    const newAlert: AlertUpload = {
+      profile_id: params.profile_id,
+      guest_name: params.guest_name || '',
+      visit_date: visitDate,
+      season: season,
+      type: params.type,
+      alert_message: params.alert_message,
+    };
+
+    existingAlerts.push(newAlert);
+
+    await AsyncStorage.setItem(TODAYS_ALERTS_KEY, JSON.stringify(existingAlerts));
+  } catch (error) {
+    console.error('Error creating alert:', error);
+    throw new Error('Failed to create alert');
+  }
+};
+
+// Clear today's alerts
+export const clearTodaysAlerts = async (): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(TODAYS_ALERTS_KEY, JSON.stringify([]));
+  } catch (error) {
+    console.error('Error clearing today\'s alerts:', error);
+    throw new Error('Failed to clear alerts');
+  }
 };

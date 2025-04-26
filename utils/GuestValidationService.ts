@@ -1,6 +1,6 @@
 import { Alert } from 'react-native';
 import { getAllMembers } from './MemberStorageService';
-import { getTodaysCheckins } from './CheckInStorageService';
+import { getTodaysCheckins, createAlert } from './CheckInStorageService';
 
 /**
  * Gets the number of times a guest has visited in the current summer season
@@ -93,6 +93,7 @@ export const getPreviousGuests = async (profileId: number): Promise<string[]> =>
  */
 export const validateGuestVisitLimit = async (
   guest: { name: string; notes?: string },
+  profileId: number,
   existingGuestNames: string[] = []
 ): Promise<boolean> => {
   if (guest.name.trim() === '') return false;
@@ -103,9 +104,14 @@ export const validateGuestVisitLimit = async (
   }
   
   const visitCount = await getGuestVisitCount(guest.name);
-  if (visitCount >= 3) {
+  if (visitCount > 3) {
     // Flag this guest instead of preventing the check-in
-    guest.notes = `${guest.notes || ''} ALERT: This is visit #${visitCount + 1} (exceeds 3-visit limit)`.trim();
+    await createAlert({
+      profile_id: profileId,
+      guest_name: guest.name,
+      type: 'GuestLimit',
+      alert_message: `This is visit #${visitCount + 1} (exceeds 3-visit limit)`
+    });
     return true;
   }
   
@@ -134,6 +140,7 @@ export const validateGuestCount = (
  */
 export const processGuests = async (
   guests: Array<{ name: string; notes?: string }>,
+  profileId: number,
   existingGuestNames: string[] = []
 ): Promise<{
   processedGuests: Array<{ name: string; notes?: string }>;
@@ -144,7 +151,7 @@ export const processGuests = async (
   
   // Validate each guest against the limit
   for (const guest of validGuests) {
-    const isOverLimit = await validateGuestVisitLimit(guest, existingGuestNames);
+    const isOverLimit = await validateGuestVisitLimit(guest, profileId, existingGuestNames);
     if (isOverLimit) {
       guestsOverLimit.push(guest);
     }
