@@ -301,7 +301,31 @@ const CheckInStyles = StyleSheet.create({
   previousGuestTagText: {
     color: COLORS.primary,
     fontSize: 12,
-  }
+  },
+  addButton: {
+    marginLeft: 10,
+    backgroundColor: '#4FB8CE',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 10,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  
 });
 
 export default CheckInStyles;

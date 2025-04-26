@@ -38,6 +38,11 @@ const CheckInScreen = () => {
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [actionMember, setActionMember] = useState<Member | null>(null);
 
+  const [manualAlertModalVisible, setManualAlertModalVisible] = useState(false);
+  const [manualAlertGuestName, setManualAlertGuestName] = useState('');
+  const [manualAlertMessage, setManualAlertMessage] = useState('');
+
+
   useEffect(() => {
     loadMemberData();
   }, []);
@@ -264,9 +269,19 @@ const CheckInScreen = () => {
       >
         <View style={styles.header}>
           <Text style={styles.title}>Member Check-In</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row' }}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setManualAlertModalVisible(true)}
+            >
+              <Text style={styles.addButtonText}>+ Alert</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.searchContainer}>
@@ -429,6 +444,78 @@ const CheckInScreen = () => {
                   onPress={() => handleGuestSubmission()}
                 >
                   <Text style={styles.buttonText}>Add Guests</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+        {/* Manual Alert Modal */}
+        <Modal
+          visible={manualAlertModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setManualAlertModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Create Manual Alert</Text>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Member or Guest Name (optional)"
+                value={manualAlertGuestName}
+                onChangeText={setManualAlertGuestName}
+              />
+
+              <TextInput
+                style={[styles.input, { height: 100 }]}
+                placeholder="Alert Message (required)"
+                value={manualAlertMessage}
+                onChangeText={setManualAlertMessage}
+                multiline
+              />
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setManualAlertGuestName('');
+                    setManualAlertMessage('');
+                    setManualAlertModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.submitButton]}
+                  onPress={async () => {
+                    if (manualAlertMessage.trim() === '') {
+                      Alert.alert('Missing Information', 'Please enter an alert message.');
+                      return;
+                    }
+
+                    try {
+                      await DataStorage.createAlert({
+                        profile_id: 0, // no known profile
+                        guest_name: manualAlertGuestName.trim() || undefined,
+                        type: 'ManualGateAlert',
+                        alert_message: manualAlertMessage.trim()
+                      });
+
+                      Alert.alert('Alert Created', 'Manual alert recorded successfully.', [{ text: 'OK' }]);
+                    } catch (error) {
+                      console.error('Error creating manual alert:', error);
+                      Alert.alert('Error', 'Failed to create alert.');
+                    }
+
+                    // Reset form
+                    setManualAlertGuestName('');
+                    setManualAlertMessage('');
+                    setManualAlertModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.buttonText}>Submit</Text>
                 </TouchableOpacity>
               </View>
             </View>
