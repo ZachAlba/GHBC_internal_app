@@ -41,6 +41,7 @@ const CheckInScreen = () => {
   const [manualAlertModalVisible, setManualAlertModalVisible] = useState(false);
   const [manualAlertGuestName, setManualAlertGuestName] = useState('');
   const [manualAlertMessage, setManualAlertMessage] = useState('');
+  const [isSavingManualAlert, setIsSavingManualAlert] = useState(false);
 
 
   useEffect(() => {
@@ -476,6 +477,7 @@ const CheckInScreen = () => {
               />
 
               <View style={styles.modalButtons}>
+                {/* TODO: Strange bug when attempting to create alert while typing into search bar */}
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
                   onPress={() => {
@@ -488,7 +490,7 @@ const CheckInScreen = () => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.submitButton]}
+                  style={[styles.modalButton, styles.submitButton, isSavingManualAlert && { opacity: 0.6 }]}
                   onPress={async () => {
                     if (manualAlertMessage.trim() === '') {
                       Alert.alert('Missing Information', 'Please enter an alert message.');
@@ -496,6 +498,8 @@ const CheckInScreen = () => {
                     }
 
                     try {
+                      setIsSavingManualAlert(true);
+                      
                       await DataStorage.createAlert({
                         profile_id: 0, // no known profile
                         guest_name: manualAlertGuestName.trim() || undefined,
@@ -507,12 +511,12 @@ const CheckInScreen = () => {
                     } catch (error) {
                       console.error('Error creating manual alert:', error);
                       Alert.alert('Error', 'Failed to create alert.');
+                    }finally {
+                      setIsSavingManualAlert(false);
+                      setManualAlertGuestName('');
+                      setManualAlertMessage('');
+                      setManualAlertModalVisible(false);
                     }
-
-                    // Reset form
-                    setManualAlertGuestName('');
-                    setManualAlertMessage('');
-                    setManualAlertModalVisible(false);
                   }}
                 >
                   <Text style={styles.buttonText}>Submit</Text>

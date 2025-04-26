@@ -1,17 +1,17 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet } from "react-native";
 
 // Colors
 export const COLORS = {
-  primary: '#0066cc',
-  secondary: '#4FB8CE',
-  accent: '#FFB347',
-  success: '#5FAD56',
-  lightGreen: '#e6ffee',
-  background: '#e6f2ff',
-  white: 'white',
-  lightGray: '#ccc',
-  mediumGray: '#666',
-  darkGray: '#444',
+  primary: "#0066cc",
+  secondary: "#4FB8CE",
+  accent: "#FFB347",
+  success: "#5FAD56",
+  lightGreen: "#e6ffee",
+  background: "#e6f2ff",
+  white: "white",
+  lightGray: "#ccc",
+  mediumGray: "#666",
+  darkGray: "#444",
 };
 
 // Shared styles
@@ -21,36 +21,36 @@ export const globalStyles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
   },
   title: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: COLORS.primary,
   },
   buttonText: {
     color: COLORS.white,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContainer: {
-    width: '80%',
+    width: "80%",
     backgroundColor: COLORS.white,
     borderRadius: 20,
     padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -58,7 +58,7 @@ export const globalStyles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 15,
     color: COLORS.primary,
   },
@@ -84,11 +84,11 @@ const CheckInStyles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     color: COLORS.primary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   searchContainer: {
     margin: 16,
-    position: 'relative',
+    position: "relative",
   },
   searchInput: {
     backgroundColor: COLORS.white,
@@ -96,44 +96,44 @@ const CheckInStyles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 15,
     fontSize: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
     elevation: 2,
   },
   clearButton: {
-    position: 'absolute',
+    position: "absolute",
     right: 16,
-    top: '50%',
+    top: "50%",
     transform: [{ translateY: -12 }],
     width: 24,
     height: 24,
     borderRadius: 12,
     backgroundColor: COLORS.lightGray,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   clearButtonText: {
     fontSize: 18,
     color: COLORS.white,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   searchPrompt: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 32,
   },
   searchPromptText: {
-    textAlign: 'center',
+    textAlign: "center",
     color: COLORS.mediumGray,
     fontSize: 16,
   },
   noResults: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   noResultsText: {
     color: COLORS.mediumGray,
@@ -141,8 +141,8 @@ const CheckInStyles = StyleSheet.create({
   },
   loader: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   memberList: {
     paddingHorizontal: 16,
@@ -153,8 +153,8 @@ const CheckInStyles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 15,
     padding: 16,
-    flexDirection: 'row',
-    shadowColor: '#000',
+    flexDirection: "row",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -170,11 +170,11 @@ const CheckInStyles = StyleSheet.create({
   },
   memberName: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 4,
   },
   memberDetails: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 4,
   },
   membershipType: {
@@ -185,7 +185,7 @@ const CheckInStyles = StyleSheet.create({
     borderRadius: 10,
     fontSize: 12,
     marginRight: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   phoneNumber: {
     color: COLORS.mediumGray,
@@ -200,10 +200,10 @@ const CheckInStyles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.mediumGray,
     marginTop: 4,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   statusContainer: {
-    justifyContent: 'center',
+    justifyContent: "center",
     marginLeft: 8,
   },
   checkedInBadge: {
@@ -215,7 +215,7 @@ const CheckInStyles = StyleSheet.create({
   checkedInText: {
     color: COLORS.white,
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   checkInButton: {
     backgroundColor: COLORS.accent,
@@ -226,7 +226,7 @@ const CheckInStyles = StyleSheet.create({
   checkInButtonText: {
     color: COLORS.white,
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   modalOverlay: {
     ...globalStyles.modalOverlay,
@@ -238,12 +238,12 @@ const CheckInStyles = StyleSheet.create({
     ...globalStyles.modalTitle,
   },
   guestListContainer: {
-    width: '100%',
+    width: "100%",
     maxHeight: 300,
     marginBottom: 15,
   },
   guestInput: {
-    width: '100%',
+    width: "100%",
     padding: 10,
     borderWidth: 1,
     borderColor: COLORS.lightGray,
@@ -251,15 +251,15 @@ const CheckInStyles = StyleSheet.create({
     marginBottom: 10,
   },
   modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
   },
   modalButton: {
     padding: 10,
     borderRadius: 10,
-    width: '48%',
-    alignItems: 'center',
+    width: "48%",
+    alignItems: "center",
   },
   cancelButton: {
     backgroundColor: COLORS.lightGray,
@@ -277,12 +277,12 @@ const CheckInStyles = StyleSheet.create({
     ...globalStyles.buttonText,
   },
   previousGuestsContainer: {
-    width: '100%',
+    width: "100%",
     marginBottom: 15,
   },
   previousGuestsTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 8,
     color: COLORS.darkGray,
   },
@@ -290,7 +290,7 @@ const CheckInStyles = StyleSheet.create({
     maxHeight: 40,
   },
   previousGuestTag: {
-    backgroundColor: '#E8F4F8',
+    backgroundColor: "#E8F4F8",
     borderRadius: 15,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -304,28 +304,30 @@ const CheckInStyles = StyleSheet.create({
   },
   addButton: {
     marginLeft: 10,
-    backgroundColor: '#4FB8CE',
+    backgroundColor: "#4FB8CE",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   addButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   input: {
+    width: "100%",
+    minHeight: 50,
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 10,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 15,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
-  
 });
 
 export default CheckInStyles;
