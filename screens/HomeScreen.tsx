@@ -7,6 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, ApiResponse, UploadData } from '../types/types';
 import * as DataStorage from '../utils';
 import styles from '../styles/HomeStyles';
+import {Upload, Download} from '../utils/Api'; 
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'HomeScreen'>;
 
@@ -123,40 +124,12 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
     setIsLoading(true);
   
     try {
-      const checkIns = await DataStorage.getTodaysCheckins();
-      const alerts = await DataStorage.getTodaysAlerts(); // <-- get alerts
-  
-      if (checkIns.length === 0 && alerts.length === 0) {
-        Alert.alert('No Data', 'There are no check-ins or alerts to upload');
-        setIsLoading(false);
-        return;
-      }
-  
-      const uploadData: UploadData = {
-        checkins: checkIns,
-        alerts: alerts, // <-- include alerts
-        device_id: 'gate_tablet_1',
-        season: new Date().getFullYear().toString()
-      };
-  
-      const response = await fetch(`${API_BASE_URL}/upload.php`, {
-        method: 'POST',
-        headers: {
-          'X-Api-Key': API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(uploadData)
-      });
-  
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-  
-      const result = await response.json();
+      const uploadData = await DataStorage.prepareUploadData('gate_tablet_1'); 
+      const result = await Upload(uploadData); 
   
       if (result.status === 200) {
         await DataStorage.clearTodaysCheckins();
-        await DataStorage.clearTodaysAlerts(); // <-- clear alerts too
+        await DataStorage.clearTodaysAlerts();
   
         const stats = result.data.checkins;
         Alert.alert('Success',

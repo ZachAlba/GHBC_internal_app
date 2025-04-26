@@ -6,7 +6,7 @@ const API_KEY = process.env.EXPO_PUBLIC_API_KEY || '';
 /**
  * Upload check-in and alert data to the server
  */
-export const upload = async (uploadData: UploadData): Promise<any> => {
+export const Upload = async (uploadData: UploadData): Promise<any> => {
   try {
     const response = await fetch(`${API_BASE_URL}/upload.php`, {
       method: 'POST',
