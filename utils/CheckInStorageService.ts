@@ -6,6 +6,7 @@ import {
   processGuests, 
   showGuestLimitAlert 
 } from './GuestValidationService';
+import { getCurrentSeason } from './Utils';
 
 // Storage key
 export const TODAYS_CHECKINS_KEY = '@todays_checkins';
@@ -47,7 +48,7 @@ export const initializeTodaysCheckins = async (): Promise<void> => {
 export const prepareUploadData = async (deviceId: string): Promise<UploadData> => {
   const checkins = await getTodaysCheckins();
   const alerts = await getTodaysAlerts(); 
-  const season = new Date().getFullYear().toString();
+  const season = getCurrentSeason();
   
   return {
     checkins,
@@ -216,7 +217,7 @@ export const createAlert = async (params: {
 
     const now = new Date();
     const visitDate = params.visit_date || now.toISOString().split('T')[0];
-    const season = params.season || `${now.getMonth() >= 4 && now.getMonth() <= 9 ? 'S' : 'W'}${now.getFullYear()}`;
+    const season = getCurrentSeason();
 
     const newAlert: AlertUpload = {
       profile_id: params.profile_id,
