@@ -24,6 +24,7 @@ type CheckInScreenNavigationProp = NativeStackNavigationProp<RootStackParamList,
 const CheckInScreen = () => {
   const navigation = useNavigation<CheckInScreenNavigationProp>();
 
+  // I love state management
   const [searchQuery, setSearchQuery] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
@@ -34,6 +35,7 @@ const CheckInScreen = () => {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [guestNames, setGuestNames] = useState<string[]>(['', '', '', '', '']);
   const [previousGuests, setPreviousGuests] = useState<string[]>([]);
+  const [todaysGuestMap, setTodaysGuestMap] = useState<Map<number, Set<string>>>(new Map());
 
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [actionMember, setActionMember] = useState<Member | null>(null);
@@ -74,6 +76,20 @@ const CheckInScreen = () => {
       // Get today's check-ins
       const checkIns = await DataStorage.getTodaysCheckins();
       setTodaysCheckins(checkIns);
+
+      // Create a map of today's guests for quick access
+      const todaysGuestMap = new Map<number, Set<string>>();
+
+      checkIns.forEach(checkIn => {
+        const guestSet = new Set<string>();
+        checkIn.guests.forEach(guest => {
+          guestSet.add(guest.name.toLowerCase());
+        });
+        todaysGuestMap.set(checkIn.profile_id, guestSet);
+      });
+
+      setTodaysGuestMap(todaysGuestMap);
+
     } catch (error) {
       console.error('Error loading member data:', error);
       Alert.alert('Error', 'Failed to load member data. Please go back and download data again.');
@@ -393,20 +409,34 @@ const CheckInScreen = () => {
                 <View style={styles.previousGuestsContainer}>
                   <Text style={styles.previousGuestsTitle}>Previous Guests:</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previousGuestsScroll}>
-                    {previousGuests.map((guestName, index) => (
-                      <TouchableOpacity
-                        key={index}
-                        style={styles.previousGuestTag}
-                        onPress={() => {
-                          // Find first empty or select input field
-                          const emptyIndex = guestNames.findIndex(name => name === '');
-                          const targetIndex = emptyIndex >= 0 ? emptyIndex : 0;
-                          selectPreviousGuest(guestName, targetIndex);
-                        }}
-                      >
-                        <Text style={styles.previousGuestTagText}>{guestName}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {previousGuests.map((guestName, index) => {
+                      const isAlreadyCheckedIn = selectedMember
+                        ? todaysGuestMap.get(selectedMember.profile_id)?.has(guestName.toLowerCase())
+                        : false;
+
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={[
+                            styles.previousGuestTag,
+                            isAlreadyCheckedIn && styles.alreadyCheckedInGuestTag 
+                          ]}
+                          onPress={() => {
+                            if (!isAlreadyCheckedIn) { 
+                              const emptyIndex = guestNames.findIndex(name => name === '');
+                              const targetIndex = emptyIndex >= 0 ? emptyIndex : 0;
+                              selectPreviousGuest(guestName, targetIndex);
+                            }
+                          }}
+                          disabled={isAlreadyCheckedIn} 
+                        >
+                          <Text style={styles.previousGuestTagText}>
+                            {guestName}
+                            {isAlreadyCheckedIn && ' (Checked In)'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </ScrollView>
                 </View>
               )}
@@ -499,7 +529,7 @@ const CheckInScreen = () => {
 
                     try {
                       setIsSavingManualAlert(true);
-                      
+
                       await DataStorage.createAlert({
                         profile_id: 0, // no known profile
                         guest_name: manualAlertGuestName.trim() || undefined,
@@ -511,7 +541,7 @@ const CheckInScreen = () => {
                     } catch (error) {
                       console.error('Error creating manual alert:', error);
                       Alert.alert('Error', 'Failed to create alert.');
-                    }finally {
+                    } finally {
                       setIsSavingManualAlert(false);
                       setManualAlertGuestName('');
                       setManualAlertMessage('');

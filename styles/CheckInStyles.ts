@@ -328,6 +328,10 @@ const CheckInStyles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#fff",
   },
+  alreadyCheckedInGuestTag: {
+    backgroundColor: '#ddd',
+    borderColor: '#aaa',
+  },
 });
 
 export default CheckInStyles;
