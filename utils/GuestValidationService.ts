@@ -1,24 +1,28 @@
 import { Alert } from 'react-native';
 import { getAllMembers } from './MemberStorageService';
-import { getTodaysCheckins, createAlert } from './CheckInStorageService';
+import { createAlert } from './AlertStorageService';
+import { CheckIn } from '../types/types';
+import { getCurrentSeason, getSeasonFromDate } from './Utils';
 
 /**
- * Gets the number of times a guest has visited in the current summer season
+ * Gets the number of times a guest has visited in the current season
  * Combines data from historical guest visits and today's check-ins
  */
-export const getGuestVisitCount = async (guestName: string): Promise<number> => {
+export const getGuestVisitCount = async (
+  guestName: string,
+  todaysCheckIns: CheckIn[]
+): Promise<number> => {
   try {
     const members = await getAllMembers();
-    const currentYear = new Date().getFullYear();
+    const currentSeason = getCurrentSeason();
     let count = 0;
     
-    // Count historical visits for this guest in the current year
+    // Count historical visits for this guest in the current season
     members.forEach(member => {
       if (member.guest_visits && member.guest_visits.length > 0) {
         member.guest_visits.forEach(visit => {
-          const visitYear = new Date(visit.visit_date).getFullYear();
           if (
-            visitYear === currentYear &&
+            getSeasonFromDate(visit.visit_date) === currentSeason &&
             visit.guest_name.toLowerCase() === guestName.toLowerCase()
           ) {
             count++;
@@ -28,7 +32,6 @@ export const getGuestVisitCount = async (guestName: string): Promise<number> => 
     });
     
     // Also check today's check-ins for this guest
-    const todaysCheckIns = await getTodaysCheckins();
     todaysCheckIns.forEach(checkIn => {
       checkIn.guests.forEach(guest => {
         if (guest.name.toLowerCase() === guestName.toLowerCase()) {
@@ -48,17 +51,17 @@ export const getGuestVisitCount = async (guestName: string): Promise<number> => 
  * Gets all previously checked-in guests for a specific member
  * from historical guest visits and today's check-ins
  */
-export const getPreviousGuests = async (profileId: number): Promise<string[]> => {
+export const getPreviousGuests = async (
+  profileId: number,
+  todaysCheckIns: CheckIn[]
+): Promise<string[]> => {
   try {
-    // Get member to access historical guest visits
     const members = await getAllMembers();
     const member = members.find(m => m.profile_id === profileId);
     if (!member) return [];
     
-    // Get unique guest names from historical data
     const uniqueGuests = new Set<string>();
     
-    // Add guests from historical visits
     if (member.guest_visits && member.guest_visits.length > 0) {
       member.guest_visits.forEach(visit => {
         if (visit.guest_name) {
@@ -67,10 +70,7 @@ export const getPreviousGuests = async (profileId: number): Promise<string[]> =>
       });
     }
     
-    // Also check today's check-ins for this member
-    const todaysCheckins = await getTodaysCheckins();
-    const memberCheckins = todaysCheckins.filter(checkIn => checkIn.profile_id === profileId);
-    
+    const memberCheckins = todaysCheckIns.filter(checkIn => checkIn.profile_id === profileId);
     memberCheckins.forEach(checkIn => {
       checkIn.guests.forEach(guest => {
         if (guest.name) {
@@ -94,18 +94,17 @@ export const getPreviousGuests = async (profileId: number): Promise<string[]> =>
 export const validateGuestVisitLimit = async (
   guest: { name: string; notes?: string },
   profileId: number,
+  todaysCheckIns: CheckIn[],
   existingGuestNames: string[] = []
 ): Promise<boolean> => {
   if (guest.name.trim() === '') return false;
   
-  // Skip if already checked in today (avoid double counting)
   if (existingGuestNames.includes(guest.name.toLowerCase())) {
     return false;
   }
   
-  const visitCount = await getGuestVisitCount(guest.name);
-  if (visitCount > 3) {
-    // Flag this guest instead of preventing the check-in
+  const visitCount = await getGuestVisitCount(guest.name, todaysCheckIns);
+  if (visitCount >= 3) {
     await createAlert({
       profile_id: profileId,
       guest_name: guest.name,
@@ -135,12 +134,12 @@ export const validateGuestCount = (
 };
 
 /**
- * Helper to process guests, validate them, and create alerts if needed
- * Returns processed guests and any alerts to display
+ * Processes guests, validates them, and generates alerts if needed
  */
 export const processGuests = async (
   guests: Array<{ name: string; notes?: string }>,
   profileId: number,
+  todaysCheckIns: CheckIn[],
   existingGuestNames: string[] = []
 ): Promise<{
   processedGuests: Array<{ name: string; notes?: string }>;
@@ -148,15 +147,14 @@ export const processGuests = async (
 }> => {
   const validGuests = guests.filter(guest => guest.name.trim() !== '');
   const guestsOverLimit: Array<{ name: string; notes?: string }> = [];
-  
-  // Validate each guest against the limit
+
   for (const guest of validGuests) {
-    const isOverLimit = await validateGuestVisitLimit(guest, profileId, existingGuestNames);
+    const isOverLimit = await validateGuestVisitLimit(guest, profileId, todaysCheckIns, existingGuestNames);
     if (isOverLimit) {
       guestsOverLimit.push(guest);
     }
   }
-  
+
   return {
     processedGuests: validGuests,
     guestsOverLimit
@@ -164,7 +162,7 @@ export const processGuests = async (
 };
 
 /**
- * Display alert for guests exceeding visit limit
+ * Displays an alert for guests who exceeded the 3-visit limit
  */
 export const showGuestLimitAlert = (guestsOverLimit: Array<{ name: string; notes?: string }>) => {
   if (guestsOverLimit.length > 0) {

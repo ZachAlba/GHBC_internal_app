@@ -1,16 +1,16 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CheckIn, Member, UploadData, AlertUpload } from '../types/types';
-import { getMemberName } from './MemberStorageService';
-import { 
-  validateGuestCount, 
-  processGuests, 
-  showGuestLimitAlert 
-} from './GuestValidationService';
-import { getCurrentSeason } from './Utils';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { CheckIn, Member, UploadData, AlertUpload } from "../types/types";
+import { getMemberName } from "./MemberStorageService";
+import {
+  validateGuestCount,
+  processGuests,
+  showGuestLimitAlert,
+} from "./GuestValidationService";
+import { getCurrentSeason } from "./Utils";
+import { getTodaysAlerts, clearTodaysAlerts } from "./AlertStorageService";
 
 // Storage key
-export const TODAYS_CHECKINS_KEY = '@todays_checkins';
-export const TODAYS_ALERTS_KEY = '@todays_alerts';
+export const TODAYS_CHECKINS_KEY = "@todays_checkins";
 
 /**
  * Gets today's check-ins from AsyncStorage
@@ -19,10 +19,10 @@ export const getTodaysCheckins = async (): Promise<CheckIn[]> => {
   try {
     const checkInsString = await AsyncStorage.getItem(TODAYS_CHECKINS_KEY);
     if (!checkInsString) return [];
-    
+
     return JSON.parse(checkInsString) as CheckIn[];
   } catch (error) {
-    console.error('Error retrieving today\'s check-ins:', error);
+    console.error("Error retrieving today's check-ins:", error);
     return [];
   }
 };
@@ -37,24 +37,26 @@ export const initializeTodaysCheckins = async (): Promise<void> => {
       await AsyncStorage.setItem(TODAYS_CHECKINS_KEY, JSON.stringify([]));
     }
   } catch (error) {
-    console.error('Error initializing check-ins:', error);
-    throw new Error('Failed to initialize check-in data');
+    console.error("Error initializing check-ins:", error);
+    throw new Error("Failed to initialize check-in data");
   }
 };
 
 /**
  * Prepares check-in data for uploading to the server
  */
-export const prepareUploadData = async (deviceId: string): Promise<UploadData> => {
+export const prepareUploadData = async (
+  deviceId: string
+): Promise<UploadData> => {
   const checkins = await getTodaysCheckins();
-  const alerts = await getTodaysAlerts(); 
+  const alerts = await getTodaysAlerts();
   const season = getCurrentSeason();
-  
+
   return {
     checkins,
     alerts,
     device_id: deviceId,
-    season
+    season,
   };
 };
 
@@ -65,8 +67,8 @@ export const clearTodaysCheckins = async (): Promise<void> => {
   try {
     await AsyncStorage.setItem(TODAYS_CHECKINS_KEY, JSON.stringify([]));
   } catch (error) {
-    console.error('Error clearing today\'s check-ins:', error);
-    throw new Error('Failed to clear check-in data');
+    console.error("Error clearing today's check-ins:", error);
+    throw new Error("Failed to clear check-in data");
   }
 };
 
@@ -80,18 +82,17 @@ const handleGuestCheckIn = async (
   isAddingToExisting: boolean = false
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    // Get current check-ins
-    const checkIns = await getTodaysCheckins();
-    
+    const checkIns = await getTodaysCheckins(); // <-- fetch today's check-ins first
+    const todaysCheckIns = checkIns; // reuse for clarity
+
     // Find existing check-in if any
     const existingCheckInIndex = checkIns.findIndex(checkIn => checkIn.profile_id === profileId);
     const existingCheckIn = existingCheckInIndex !== -1 ? checkIns[existingCheckInIndex] : null;
-    
-    // Handle different scenarios based on whether this is a new check-in or adding guests
+
     if (!isAddingToExisting && existingCheckIn) {
-      return { 
-        success: false, 
-        message: `${memberName} is already checked in today.` 
+      return {
+        success: false,
+        message: `${memberName} is already checked in today.`
       };
     } else if (isAddingToExisting && !existingCheckIn) {
       return {
@@ -99,29 +100,31 @@ const handleGuestCheckIn = async (
         message: 'Member is not checked in today'
       };
     }
-    
-    // Validate total guest count
+
     const currentGuestCount = existingCheckIn ? existingCheckIn.guests.length : 0;
     const validGuests = guests.filter(g => g.name.trim() !== '');
     const guestCountValidation = validateGuestCount(currentGuestCount, validGuests.length);
-      
+
     if (!guestCountValidation.valid) {
       return {
         success: false,
         message: guestCountValidation.message || 'Too many guests'
       };
     }
-    
-    // Get existing guest names for validation
-    const existingGuestNames = existingCheckIn 
-      ? existingCheckIn.guests.map(g => g.name.toLowerCase()) 
+
+    const existingGuestNames = existingCheckIn
+      ? existingCheckIn.guests.map(g => g.name.toLowerCase())
       : [];
-    
-    // Process and validate guests
-    const { processedGuests, guestsOverLimit } = await processGuests(guests, profileId, existingGuestNames);
-    
+
+    // 🛠 Updated call
+    const { processedGuests, guestsOverLimit } = await processGuests(
+      guests,
+      profileId,
+      todaysCheckIns,
+      existingGuestNames
+    );
+
     if (!isAddingToExisting) {
-      // Create a new check-in record
       const now = new Date();
       const newCheckIn: CheckIn = {
         profile_id: profileId,
@@ -129,32 +132,30 @@ const handleGuestCheckIn = async (
         check_in_time: now.toTimeString().split(' ')[0],
         guests: processedGuests
       };
-      
-      // Save the new check-in
+
       checkIns.push(newCheckIn);
       await AsyncStorage.setItem(TODAYS_CHECKINS_KEY, JSON.stringify(checkIns));
-      
-      // Show alert for guests over limit
+
       showGuestLimitAlert(guestsOverLimit);
-      
+
       const guestText = processedGuests.length > 0
         ? ` with ${processedGuests.length} guest${processedGuests.length > 1 ? 's' : ''}`
         : '';
-        
+
       return {
         success: true,
         message: `${memberName} has been checked in${guestText}!`
       };
     } else {
-      // Add guests to existing check-in
-      checkIns[existingCheckInIndex].guests = [...checkIns[existingCheckInIndex].guests, ...processedGuests];
-      
-      // Save updated check-ins
+      checkIns[existingCheckInIndex].guests = [
+        ...checkIns[existingCheckInIndex].guests,
+        ...processedGuests
+      ];
+
       await AsyncStorage.setItem(TODAYS_CHECKINS_KEY, JSON.stringify(checkIns));
-      
-      // Show alert for guests over limit
+
       showGuestLimitAlert(guestsOverLimit);
-      
+
       return {
         success: true,
         message: `Added ${processedGuests.length} guest(s) to ${memberName}'s check-in.`
@@ -173,10 +174,15 @@ const handleGuestCheckIn = async (
  * Adds a new check-in to AsyncStorage
  */
 export const addCheckIn = async (
-  member: Member, 
+  member: Member,
   guests: Array<{ name: string; notes?: string }>
 ): Promise<{ success: boolean; message: string }> => {
-  return handleGuestCheckIn(member.profile_id, member.name || 'Member', guests, false);
+  return handleGuestCheckIn(
+    member.profile_id,
+    member.name || "Member",
+    guests,
+    false
+  );
 };
 
 /**
@@ -188,61 +194,4 @@ export const addGuestsToExistingCheckIn = async (
 ): Promise<{ success: boolean; message: string }> => {
   const memberName = await getMemberName(profileId);
   return handleGuestCheckIn(profileId, memberName, newGuests, true);
-};
-
-
-
-// Get today's alerts
-export const getTodaysAlerts = async (): Promise<AlertUpload[]> => {
-  try {
-    const alertsString = await AsyncStorage.getItem(TODAYS_ALERTS_KEY);
-    return alertsString ? JSON.parse(alertsString) : [];
-  } catch (error) {
-    console.error('Error retrieving today\'s alerts:', error);
-    return [];
-  }
-};
-
-// Core function to create a new alert
-export const createAlert = async (params: {
-  profile_id: number;
-  guest_name?: string;
-  visit_date?: string;
-  season?: string;
-  type: string;
-  alert_message: string;
-}): Promise<void> => {
-  try {
-    const existingAlerts = await getTodaysAlerts();
-
-    const now = new Date();
-    const visitDate = params.visit_date || now.toISOString().split('T')[0];
-    const season = getCurrentSeason();
-
-    const newAlert: AlertUpload = {
-      profile_id: params.profile_id,
-      guest_name: params.guest_name || '',
-      visit_date: visitDate,
-      season: season,
-      type: params.type,
-      alert_message: params.alert_message,
-    };
-
-    existingAlerts.push(newAlert);
-
-    await AsyncStorage.setItem(TODAYS_ALERTS_KEY, JSON.stringify(existingAlerts));
-  } catch (error) {
-    console.error('Error creating alert:', error);
-    throw new Error('Failed to create alert');
-  }
-};
-
-// Clear today's alerts
-export const clearTodaysAlerts = async (): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(TODAYS_ALERTS_KEY, JSON.stringify([]));
-  } catch (error) {
-    console.error('Error clearing today\'s alerts:', error);
-    throw new Error('Failed to clear alerts');
-  }
 };

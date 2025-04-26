@@ -3,3 +3,4 @@ export * from './MemberStorageService';
 export * from './CheckInStorageService';
 export * from './GuestValidationService';
 export * from './Utils';
+export * from './AlertStorageService';

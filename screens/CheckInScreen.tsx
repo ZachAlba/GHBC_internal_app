@@ -28,7 +28,7 @@ const CheckInScreen = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [todaysCheckins, setTodaysCheckins] = useState<number[]>([]);
+  const [todaysCheckins, setTodaysCheckins] = useState<CheckIn[]>([]);
 
   const [guestModalVisible, setGuestModalVisible] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -64,10 +64,10 @@ const CheckInScreen = () => {
       // Get all members using our storage utility
       const allMembers = await DataStorage.getAllMembers();
       setMembers(allMembers);
-      
+
       // Get today's check-ins
       const checkIns = await DataStorage.getTodaysCheckins();
-      setTodaysCheckins(checkIns.map(c => c.profile_id));
+      setTodaysCheckins(checkIns);
     } catch (error) {
       console.error('Error loading member data:', error);
       Alert.alert('Error', 'Failed to load member data. Please go back and download data again.');
@@ -83,20 +83,20 @@ const CheckInScreen = () => {
 
   const promptForGuests = async (member: Member) => {
     setSelectedMember(member);
-    
+
     // Check if member is already checked in today
-    const isAlreadyCheckedIn = todaysCheckins.includes(member.profile_id);
-    
+    const isAlreadyCheckedIn = todaysCheckins.some(checkIn => checkIn.profile_id === member.profile_id);
+
     if (isAlreadyCheckedIn) {
       try {
         // Get existing check-in to determine remaining guest slots
         const checkIns = await DataStorage.getTodaysCheckins();
         const existingCheckIn = checkIns.find(checkIn => checkIn.profile_id === member.profile_id);
-        
+
         if (existingCheckIn) {
           const currentGuestCount = existingCheckIn.guests.length;
           const remainingSlots = Math.max(0, 5 - currentGuestCount);
-          
+
           if (remainingSlots === 0) {
             Alert.alert(
               'Maximum Guests Reached',
@@ -106,7 +106,7 @@ const CheckInScreen = () => {
             setSelectedMember(null);
             return;
           }
-          
+
           // Initialize only the remaining number of slots
           setGuestNames(Array(remainingSlots).fill(''));
         }
@@ -118,16 +118,17 @@ const CheckInScreen = () => {
       // For new check-ins, show all 5 slots
       setGuestNames(['', '', '', '', '']);
     }
-    
+
     // Load previous guests for this member
     try {
-      const previousGuestsList = await DataStorage.getPreviousGuests(member.profile_id);
+      const todaysCheckIns = await DataStorage.getTodaysCheckins();
+      const previousGuestsList = await DataStorage.getPreviousGuests(member.profile_id, todaysCheckIns);
       setPreviousGuests(previousGuestsList);
     } catch (error) {
       console.error('Error loading previous guests:', error);
       setPreviousGuests([]);
     }
-    
+
     setGuestModalVisible(true);
   };
 
@@ -136,16 +137,16 @@ const CheckInScreen = () => {
       const validGuests = guestNames
         .filter(name => name.trim() !== '')
         .map(name => ({ name, notes: 'Added via check-in' }));
-      
+
       if (validGuests.length === 0) {
         setGuestModalVisible(false);
         setSelectedMember(null);
         return;
       }
-      
+
       // Check if member is already checked in today
-      const isAlreadyCheckedIn = todaysCheckins.includes(selectedMember.profile_id);
-      
+      const isAlreadyCheckedIn = todaysCheckins.some(checkIn => checkIn.profile_id === selectedMember.profile_id);
+
       if (isAlreadyCheckedIn) {
         // Use the utility function to add guests to existing check-in
         const result = await DataStorage.addGuestsToExistingCheckIn(selectedMember.profile_id, validGuests);
@@ -174,12 +175,20 @@ const CheckInScreen = () => {
   const completeCheckIn = async (member: Member, guests: Array<{ name: string; notes?: string }>) => {
     try {
       const result = await DataStorage.addCheckIn(member, guests);
-      
+
       if (result.success) {
         Alert.alert('Check-in Successful', result.message, [{ text: 'OK' }]);
         // Update the local todaysCheckins state to include this member
-        setTodaysCheckins(prev => [...prev, member.profile_id]);
-        setSearchQuery('');
+        const now = new Date();
+        setTodaysCheckins(prev => [
+          ...prev,
+          {
+            profile_id: member.profile_id,
+            check_in_date: now.toISOString().split('T')[0],
+            check_in_time: now.toTimeString().split(' ')[0],
+            guests: guests || [],
+          }
+        ]);
       } else {
         Alert.alert('Check-in Failed', result.message, [{ text: 'OK' }]);
       }
@@ -190,7 +199,8 @@ const CheckInScreen = () => {
   };
 
   const renderMemberItem = ({ item }: { item: Member }) => {
-    const isCheckedIn = todaysCheckins.includes(item.profile_id);
+    const isCheckedIn = todaysCheckins.some(checkIn => checkIn.profile_id === item.profile_id);
+
 
     return (
       <TouchableOpacity
@@ -315,17 +325,18 @@ const CheckInScreen = () => {
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[
-                    styles.modalButton, 
+                    styles.modalButton,
                     styles.submitButton,
-                    (actionMember && todaysCheckins.includes(actionMember.profile_id)) && styles.disabledButton
+                    (actionMember && todaysCheckins.some(checkIn => checkIn.profile_id === actionMember.profile_id)) && styles.disabledButton
+
                   ]}
                   onPress={() => {
-                    if (actionMember && !todaysCheckins.includes(actionMember.profile_id)) {
+                    if (actionMember && !todaysCheckins.some(checkIn => checkIn.profile_id === actionMember.profile_id)) {
                       completeCheckIn(actionMember, []);
                     }
                     setActionModalVisible(false);
                   }}
-                  disabled={actionMember ? todaysCheckins.includes(actionMember.profile_id) : true}
+                  disabled={actionMember ? todaysCheckins.some(checkIn => checkIn.profile_id === actionMember.profile_id) : true}
                 >
                   <Text style={styles.buttonText}>Check In</Text>
                 </TouchableOpacity>
@@ -361,14 +372,14 @@ const CheckInScreen = () => {
               <Text style={styles.modalTitle}>
                 Add Guests for {selectedMember?.name || "Member"}
               </Text>
-              
+
               {previousGuests.length > 0 && (
                 <View style={styles.previousGuestsContainer}>
                   <Text style={styles.previousGuestsTitle}>Previous Guests:</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previousGuestsScroll}>
                     {previousGuests.map((guestName, index) => (
-                      <TouchableOpacity 
-                        key={index} 
+                      <TouchableOpacity
+                        key={index}
                         style={styles.previousGuestTag}
                         onPress={() => {
                           // Find first empty or select input field
@@ -383,7 +394,7 @@ const CheckInScreen = () => {
                   </ScrollView>
                 </View>
               )}
-              
+
               <ScrollView style={styles.guestListContainer}>
                 {guestNames.map((guestName, index) => (
                   <TextInput
