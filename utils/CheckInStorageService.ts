@@ -116,7 +116,6 @@ const handleGuestCheckIn = async (
       ? existingCheckIn.guests.map(g => g.name.toLowerCase())
       : [];
 
-    // 🛠 Updated call
     const { processedGuests, guestsOverLimit } = await processGuests(
       guests,
       profileId,
