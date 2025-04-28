@@ -7,7 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, ApiResponse, UploadData } from '../types/types';
 import * as DataStorage from '../utils';
 import styles from '../styles/HomeStyles';
-import {Upload, Download} from '../utils/Api'; 
+import { Upload, Download } from '../utils/Api';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'HomeScreen'>;
 
@@ -18,11 +18,12 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
   const [isDataDownloadedToday, setIsDataDownloadedToday] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [lastDownloadDate, setLastDownloadDate] = useState<string | null>(null);
+  const [hasPendingData, setHasPendingData] = useState(false);
 
   // Check if we have stored data when app launches
   useEffect(() => {
     checkLocalData();
-
+    refreshPendingUploads();
     // Set up network connectivity listener
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsConnected(state.isConnected ?? false);
@@ -54,6 +55,16 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
     }
   };
 
+  const refreshPendingUploads = async () => {
+    try {
+      const pending = await DataStorage.checkPendingUploads();
+      setHasPendingData(pending);
+    } catch (error) {
+      console.error('Error checking pending uploads:', error);
+      setHasPendingData(false);
+    }
+  };
+
   // Download data from the API
   const handleDownloadData = async () => {
     if (!isConnected) {
@@ -65,19 +76,19 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
 
     try {
       const apiResponse = await Download();
-  
+
       if (apiResponse.status === 200) {
         await DataStorage.storeApiData(apiResponse);
-  
+
         const today = new Date();
         await AsyncStorage.setItem(DataStorage.LAST_DOWNLOAD_DATE_KEY, today.toISOString());
         setLastDownloadDate(today.toLocaleDateString());
-  
+
         await AsyncStorage.setItem(DataStorage.TODAYS_CHECKINS_KEY, JSON.stringify([]));
-  
+
         setHasDownloadedData(true);
         setIsDataDownloadedToday(true);
-  
+
         Alert.alert('Success', `Downloaded data for ${apiResponse.data.members.length} members!`);
       } else {
         throw new Error(apiResponse.message || 'Failed to download data');
@@ -97,22 +108,22 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
       Alert.alert('No Data', 'Please download data first before uploading');
       return;
     }
-  
+
     if (!isConnected) {
       Alert.alert('No Connection', 'You need internet connection to upload data');
       return;
     }
-  
+
     setIsLoading(true);
-  
+
     try {
-      const uploadData = await DataStorage.prepareUploadData('gate_tablet_1'); 
-      const result = await Upload(uploadData); 
-  
+      const uploadData = await DataStorage.prepareUploadData('gate_tablet_1');
+      const result = await Upload(uploadData);
+
       if (result.status === 200) {
         await DataStorage.clearTodaysCheckins();
         await DataStorage.clearTodaysAlerts();
-  
+        await refreshPendingUploads();
         const stats = result.data.checkins;
         Alert.alert('Success',
           `Data uploaded successfully!\n` +
@@ -132,7 +143,7 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
       setIsLoading(false);
     }
   };
-  
+
 
   const handleCheckInScreen = () => {
     if (!hasDownloadedData) {
@@ -173,6 +184,11 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
               : `Member data outdated - please download today's data`)
             : 'Please download member data first'}
         </Text>
+        {hasPendingData && (
+          <Text style={[styles.warningText, { fontWeight: 'bold', marginTop: 5 }]}>
+            ⚠️ Pending data to upload!
+          </Text>
+        )}
 
         {lastDownloadDate && (
           <Text style={[
@@ -224,7 +240,8 @@ export default function HomeScreen({ navigation }: { navigation: HomeScreenNavig
           style={[
             styles.button,
             styles.orangeButton,
-            (!hasDownloadedData || !isConnected) && styles.disabledButton
+            (!hasDownloadedData || !isConnected) && styles.disabledButton,
+            hasPendingData && styles.glowEffect
           ]}
           onPress={handleUploadData}
           disabled={!hasDownloadedData || isLoading || !isConnected}

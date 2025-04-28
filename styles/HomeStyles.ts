@@ -90,6 +90,13 @@ const HomeStyles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
   },
+  glowEffect: {
+    shadowColor: '#FFAA00',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    elevation: 10, // Android shadow
+  },
 });
 
 export default HomeStyles;

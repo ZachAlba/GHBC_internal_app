@@ -194,3 +194,19 @@ export const addGuestsToExistingCheckIn = async (
   const memberName = await getMemberName(profileId);
   return handleGuestCheckIn(profileId, memberName, newGuests, true);
 };
+
+
+/**
+ * Checks if there are any pending check-ins or alerts to upload
+ */
+export const checkPendingUploads = async (): Promise<boolean> => {
+  try {
+    const checkIns = await getTodaysCheckins();
+    const alerts = await getTodaysAlerts();
+
+    return (checkIns.length > 0 || alerts.length > 0);
+  } catch (error) {
+    console.error('Error checking pending uploads:', error);
+    return false;
+  }
+};
